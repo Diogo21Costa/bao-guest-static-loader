@@ -49,11 +49,15 @@ ifeq ($(INITRAMFS),)
     $(info INITRAMFS is empty, skipping DTB modification)
 else
     $(MODIFIED_DTB): $(DTB)
+	@if [ -z "${INITRD_START}" ]; then \
+		echo "INITRD_START is not defined"; \
+		exit 1; \
+	fi
 	@echo "Modifying DTB with initrd details..."
-	INITRAMFS_SIZE=$(shell stat -c%s $(INITRAMFS)); \
-	INITRD_END=$$(printf "0x%08x" $$((0x62600000 + $$INITRAMFS_SIZE))); \
+	INITRAMFS_SIZE=$$(stat -c%s $(INITRAMFS)); \
+	INITRD_END=$$(printf "0x%08x" $$(($$INITRD_START + $$INITRAMFS_SIZE)));\
 	dtc -I dtb -O dts $(DTB) > linux.dts; \
 	sed -i '/bootargs/ s/\(bootargs *= *"[^"]*\)\("\)/\1 root=\/dev\/ram0\2/' linux.dts; \
-	sed -i "/bootargs/a \\\t\tlinux,initrd-start = <0x62600000>;\n\t\tlinux,initrd-end = <$$INITRD_END>;" linux.dts; \
-	dtc -I dts -O dtb linux.dts > $(MODIFIED_DTB)
+	sed -i "/bootargs/a \\\t\tlinux,initrd-start = <$$INITRD_START>;\n\t\tlinux,initrd-end = <$$INITRD_END>;" linux.dts; \
+	dtc -I dts -O dtb linux.dts > $(MODIFIED_DTB);
 endif
