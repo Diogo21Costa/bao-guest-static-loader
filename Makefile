@@ -1,4 +1,3 @@
-
 ifeq ($(and $(IMAGE), $(DTB), $(TARGET), $(ARCH)),)
 ifneq ($(MAKECMDGOALS), clean)
  $(error Linux image (IMAGE) and/or device tree (DTB) and/or target name \
@@ -39,25 +38,37 @@ clean:
 $(TARGET).bin: $(TARGET).elf
 	$(CROSS_COMPILE)objcopy -S -O binary $(TARGET).elf $(TARGET).bin
 
-$(TARGET).elf: $(ARCH).S $(IMAGE) $(TARGET_DTB) loader_$(ARCH).ld 
+$(TARGET).elf: $(ARCH).S $(IMAGE) loader_$(ARCH).ld 
 	$(CROSS_COMPILE)gcc -Wl,-build-id=none -nostdlib -T loader_$(ARCH).ld \
-		-o $(TARGET).elf $(OPTIONS) $(ARCH).S -I. -D IMAGE=$(IMAGE) -D DTB=$(TARGET_DTB) \
+		-o $(TARGET).elf $(OPTIONS) $(ARCH).S -I. -D IMAGE=$(IMAGE) -D DTB=$(DTB) \
 		$(if $(INITRAMFS),-D INITRAMFS=$(INITRAMFS))
+
+	@if [ ! -z "$(INITRAMFS)" ]; then \
+		$(MAKE) $(MODIFIED_DTB); \
+		$(CROSS_COMPILE)gcc -Wl,-build-id=none -nostdlib -T loader_$(ARCH).ld \
+			-o $(TARGET).elf $(OPTIONS) $(ARCH).S -I. -D IMAGE=$(IMAGE) -D DTB=$(TARGET_DTB) \
+			$(if $(INITRAMFS),-D INITRAMFS=$(INITRAMFS)); \
+	fi
 
 # Rule for modifying DTB if INITRAMFS is not empty
 ifeq ($(INITRAMFS),)
     $(info INITRAMFS is empty, skipping DTB modification)
 else
     $(MODIFIED_DTB): $(DTB)
-	@if [ -z "${INITRD_START}" ]; then \
-		echo "INITRD_START is not defined"; \
+	@if [ -z "${GUEST_LOAD_ADDRESS}" ]; then \
+		echo "GUEST_LOAD_ADDRESS is not defined"; \
 		exit 1; \
 	fi
 	@echo "Modifying DTB with initrd details..."
-	INITRAMFS_SIZE=$$(stat -c%s $(INITRAMFS)); \
-	INITRD_END=$$(printf "0x%08x" $$(($$INITRD_START + $$INITRAMFS_SIZE)));\
+	INITRD_START=$$($(CROSS_COMPILE)readelf -s $(TARGET).elf | grep __initramfs_start | awk '{printf "%d\n", "0x"$$2}'); \
+	INITRD_END=$$($(CROSS_COMPILE)readelf -s $(TARGET).elf | grep __initramfs_end | awk '{printf "%d\n", "0x"$$2}'); \
+	GUEST_LOAD_ADDRESS_DEC=$$(printf "%d" $$GUEST_LOAD_ADDRESS); \
+	INITRD_START=$$(($$INITRD_START + $$GUEST_LOAD_ADDRESS_DEC)); \
+	INITRD_END=$$(($$INITRD_END + $$GUEST_LOAD_ADDRESS_DEC)); \
+	INITRD_START=$$(printf "%x" $$INITRD_START); \
+	INITRD_END=$$(printf "%x" $$INITRD_END); \
 	dtc -I dtb -O dts $(DTB) > linux.dts; \
 	sed -i '/bootargs/ s/\(bootargs *= *"[^"]*\)\("\)/\1 root=\/dev\/ram0\2/' linux.dts; \
-	sed -i "/bootargs/a \\\t\tlinux,initrd-start = <$$INITRD_START>;\n\t\tlinux,initrd-end = <$$INITRD_END>;" linux.dts; \
+	sed -i "/bootargs/a \\\t\tlinux,initrd-start = <0x$$INITRD_START>;\n\t\tlinux,initrd-end = <0x$$INITRD_END>;" linux.dts; \
 	dtc -I dts -O dtb linux.dts > $(MODIFIED_DTB);
 endif
