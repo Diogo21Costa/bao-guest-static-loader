@@ -60,8 +60,8 @@ else
 		exit 1; \
 	fi
 	@echo "Modifying DTB with initrd details..."
-	INITRD_START=$$($(CROSS_COMPILE)readelf -s $(TARGET).elf | grep __initramfs_start | awk '{printf "%d\n", "0x"$$2}'); \
-	INITRD_END=$$($(CROSS_COMPILE)readelf -s $(TARGET).elf | grep __initramfs_end | awk '{printf "%d\n", "0x"$$2}'); \
+	INITRD_START=$$($(CROSS_COMPILE)readelf -s $(TARGET).elf | grep __initramfs_start | awk '{printf "%d\n", strtonum("0x"$$2)}'); \
+	INITRD_END=$$($(CROSS_COMPILE)readelf -s $(TARGET).elf | grep __initramfs_end | awk '{printf "%d\n", strtonum("0x"$$2)}'); \
 	GUEST_LOAD_ADDRESS_DEC=$$(printf "%d" $$GUEST_LOAD_ADDRESS); \
 	INITRD_START=$$(($$INITRD_START + $$GUEST_LOAD_ADDRESS_DEC)); \
 	INITRD_END=$$(($$INITRD_END + $$GUEST_LOAD_ADDRESS_DEC)); \
